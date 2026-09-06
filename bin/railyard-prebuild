@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Railyard: build the Ember app during the Node.js buildpack phase.
+#
+# Why this exists
+# ---------------
+# script/assemble_ember_build.rb normally either downloads prebuilt assets or
+# runs `pnpm build`. Neither works under Cloud Native Buildpacks:
+#
+#   1. The prebuilt download is keyed on the upstream commit SHA
+#      ("#{VERSION}-#{HEAD[0,8]}"), so any fork commit 404s.
+#   2. The fallback `pnpm build` needs `rolldown`, a devDependency of the
+#      frontend/discourse workspace. The Node buildpack prunes devDependencies
+#      at the end of its phase, and the Ruby buildpack runs assets:precompile
+#      *after* that -- so by then rolldown is gone.
+#
+# Running here (as `heroku-postbuild`) happens before the prune, while
+# rolldown still exists. We then write dist/BUILD_INFO.json exactly as
+# assemble_ember_build.rb would, so its existing_core_build_usable? check
+# returns true and it reuses this build instead of trying to rebuild.
+set -euo pipefail
+
+EMBER_APP_DIR="frontend/discourse"
+EMBER_ENV="${EMBER_ENV:-production}"
+
+echo "[railyard-prebuild] building ember app (EMBER_ENV=$EMBER_ENV)"
+
+# Same low-memory settings assemble_ember_build.rb applies under 2GB heap.
+export CI=1
+export SKIP_DB_AND_REDIS=1
+export JOBS=1
+export CHEAP_SOURCE_MAPS=1
+export NODE_OPTIONS="${NODE_OPTIONS:---max_old_space_size=2048}"
+export EMBER_ENV
+
+(cd "$EMBER_APP_DIR" && pnpm build)
+
+# Reproduce core_tree_hash: a git tree-hash over only the JS source paths.
+TMPIDX="$(mktemp)"
+cp .git/index "$TMPIDX"
+GIT_INDEX_FILE="$TMPIDX" git rm -r --cached . --quiet
+GIT_INDEX_FILE="$TMPIDX" git add frontend package.json pnpm-lock.yaml
+TREE_HASH="$(GIT_INDEX_FILE="$TMPIDX" git write-tree)"
+rm -f "$TMPIDX"
+
+printf '{\n  "ember_env": "%s",\n  "core_tree_hash": "%s"\n}\n' \
+  "$EMBER_ENV" "$TREE_HASH" > "$EMBER_APP_DIR/dist/BUILD_INFO.json"
+
+echo "[railyard-prebuild] wrote BUILD_INFO.json (core_tree_hash=$TREE_HASH)"
