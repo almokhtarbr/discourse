@@ -1,0 +1,17 @@
+# Added for Railyard deployment.
+#
+# Discourse shells out to system binaries that are not present in the CNB
+# build/run images (heroku/builder:24). `heroku/deb-packages` is already
+# included in that builder and installs these into a layer that is on PATH
+# both at build time and at runtime.
+#
+#   brotli      - lib/tasks/assets.rake compresses every JS/WASM asset with it;
+#                 without it `rake assets:precompile` aborts with
+#                 "Errno::ENOENT: No such file or directory - brotli"
+#   imagemagick - image processing
+#   optipng / jpegoptim / gifsicle - upload optimisation pipeline
+[_]
+schema-version = "0.2"
+
+[com.heroku.buildpacks.deb-packages]
+install = ["brotli", "imagemagick", "optipng", "jpegoptim", "gifsicle"]
