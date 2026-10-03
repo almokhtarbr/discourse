@@ -1,3 +1,4 @@
+[![Deploy to Railyard](https://app.railyard.run/deploy/badge)](https://app.railyard.run/deploy?repo=https://github.com/almokhtarbr/discourse)
 <a href="https://www.discourse.org/">
   <img src="images/discourse-readme-logo.png" width="300px">
 </a>
